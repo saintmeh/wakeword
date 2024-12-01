@@ -1,21 +1,31 @@
 import argparse
 import pyaudio
 import speech_recognition as sr
+import time
+
+class CustomArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_usage()
+        print(f"Error: {message}\n")
+        print(self.format_help())
+        self.exit(2)
 
 class MicrophoneSwitcher:
-    def __init__(self, mic_filter=None):
+    def __init__(self, mic_filter=None, sleep_word="sleep", sleep_time=30):
         self.recognizer = sr.Recognizer()
         self.microphones = self.get_filtered_microphones(mic_filter)
         if not self.microphones:
             print("No microphones match the filter. Exiting.")
             exit(1)
         self.current_mic_index = 0  # Default to the first microphone
+        self.starting_mic_index = 0  # Remember the starting microphone
+        self.sleep_word = sleep_word
+        self.sleep_time = sleep_time
 
     def get_filtered_microphones(self, mic_filter):
         all_microphones = sr.Microphone.list_microphone_names()
         if mic_filter is not None:
             try:
-                # Check if mic_filter contains indices
                 indices = [int(idx) for idx in mic_filter.split(",") if idx.isdigit()]
                 selected_mics = [all_microphones[i] for i in indices if 0 <= i < len(all_microphones)]
                 if selected_mics:
@@ -24,7 +34,6 @@ class MicrophoneSwitcher:
                     print(f"No valid microphones found for indices: {indices}")
                     exit(1)
             except ValueError:
-                # If mic_filter is not numeric, treat it as a substring filter
                 return [mic for mic in all_microphones if mic_filter.lower() in mic.lower()]
         return all_microphones
 
@@ -39,57 +48,62 @@ class MicrophoneSwitcher:
 
     def listen_for_activation(self, activation_word):
         print(f"Listening for activation word: '{activation_word}'")
+        last_activity_time = time.time()
         with sr.Microphone(device_index=self.current_mic_index) as source:
             self.recognizer.adjust_for_ambient_noise(source)
             print(f"Microphone ready: {self.microphones[self.current_mic_index]}")
             while True:
                 try:
-                    print("Waiting for activation word...")
-                    audio = self.recognizer.listen(source)
+                    print("Waiting for activation word or sleep word...")
+                    audio = self.recognizer.listen(source, timeout=self.sleep_time)
                     transcript = self.recognizer.recognize_google(audio)
                     print(f"Recognized: {transcript}")
+
+                    if self.sleep_word.lower() in transcript.lower():
+                        print(f"Detected sleep word: '{self.sleep_word}'")
+                        self.return_to_starting_mic()
+                        break
+
                     if activation_word.lower() in transcript.lower():
                         self.switch_microphone()
-                        self.listen_with_current_mic()
+                        last_activity_time = time.time()
+
+                except sr.WaitTimeoutError:
+                    if time.time() - last_activity_time >= self.sleep_time:
+                        print("No activity detected for sleep time. Returning to starting microphone.")
+                        self.return_to_starting_mic()
+                        break
                 except sr.UnknownValueError:
                     print("Could not understand audio. Try again.")
                 except sr.RequestError as e:
                     print(f"Error with speech recognition service: {e}")
 
-    def listen_with_current_mic(self):
-        with sr.Microphone(device_index=self.current_mic_index) as source:
-            print(f"Listening on {self.microphones[self.current_mic_index]}")
-            self.recognizer.adjust_for_ambient_noise(source)
-            try:
-                audio = self.recognizer.listen(source)
-                transcript = self.recognizer.recognize_google(audio)
-                print(f"You said: {transcript}")
-            except sr.UnknownValueError:
-                print("Could not understand audio.")
-            except sr.RequestError as e:
-                print(f"Error with speech recognition service: {e}")
+    def return_to_starting_mic(self):
+        self.current_mic_index = self.starting_mic_index
+        print(f"Switched back to starting microphone: {self.microphones[self.starting_mic_index]}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Microphone Switcher with Activation Word",
+    parser = CustomArgumentParser(
+        description="Microphone Switcher with Activation and Sleep Word",
         epilog=(
             "Examples:\n"
-            "  python script_name.py -l\n"
+            "  python main.py -l\n"
             "    List all available microphones.\n"
-            "  python script_name.py -f USB -a hello\n"
-            "    Use microphones containing 'USB' and set activation word to 'hello'.\n"
-            "  python script_name.py -f 0,2 -a switch\n"
-            "    Use microphones at indices 0 and 2 and set activation word to 'switch'.\n"
+            "  python main.py -f USB -a hello -s sleep -t 30\n"
+            "    Use microphones containing 'USB', set activation word to 'hello',\n"
+            "    sleep word to 'sleep', and timeout to 30 seconds."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("-l", "--list-mics", action="store_true", help="List all available microphones.")
     parser.add_argument("-f", "--mic-filter", type=str, help="Filter microphones by name substring or specify a comma-separated list of indices.")
     parser.add_argument("-a", "--activation-word", type=str, required=True, help="Set the activation word to switch microphones.")
+    parser.add_argument("-s", "--sleep-word", type=str, default="sleep", help="Set the sleep word to return to the starting microphone (default: 'sleep').")
+    parser.add_argument("-t", "--sleep-time", type=int, default=30, help="Set the sleep timeout in seconds (default: 30).")
     args = parser.parse_args()
 
     if args.list_mics:
         MicrophoneSwitcher().list_microphones()
     else:
-        switcher = MicrophoneSwitcher(mic_filter=args.mic_filter)
+        switcher = MicrophoneSwitcher(mic_filter=args.mic_filter, sleep_word=args.sleep_word, sleep_time=args.sleep_time)
         switcher.listen_for_activation(activation_word=args.activation_word)
