@@ -60,9 +60,9 @@ class MicrophoneSwitcher:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Microphone Switcher with Activation Word")
-    parser.add_argument("--list-mics", action="store_true", help="List all available microphones.")
-    parser.add_argument("--mic-filter", type=str, help="Filter microphones by name substring.")
-    parser.add_argument("--activation-word", type=str, default="switch", help="Set the activation word to switch microphones.")
+    parser.add_argument("-l", "--list-mics", action="store_true", help="List all available microphones.")
+    parser.add_argument("-f", "--mic-filter", type=str, help="Filter microphones by name substring.")
+    parser.add_argument("-a", "--activation-word", type=str, default="switch", help="Set the activation word to switch microphones.")
     args = parser.parse_args()
 
     if args.list_mics:
