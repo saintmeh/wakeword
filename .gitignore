@@ -1,0 +1,9 @@
+*.pyc
+venv/
+
+#env vars.. if we use them
+.env
+
+#ides
+.vscode/
+.idea/
