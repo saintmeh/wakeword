@@ -13,8 +13,19 @@ class MicrophoneSwitcher:
 
     def get_filtered_microphones(self, mic_filter):
         all_microphones = sr.Microphone.list_microphone_names()
-        if mic_filter:
-            return [mic for mic in all_microphones if mic_filter.lower() in mic.lower()]
+        if mic_filter is not None:
+            try:
+                # Check if mic_filter contains indices
+                indices = [int(idx) for idx in mic_filter.split(",") if idx.isdigit()]
+                selected_mics = [all_microphones[i] for i in indices if 0 <= i < len(all_microphones)]
+                if selected_mics:
+                    return selected_mics
+                else:
+                    print(f"No valid microphones found for indices: {indices}")
+                    exit(1)
+            except ValueError:
+                # If mic_filter is not numeric, treat it as a substring filter
+                return [mic for mic in all_microphones if mic_filter.lower() in mic.lower()]
         return all_microphones
 
     def list_microphones(self):
@@ -26,7 +37,7 @@ class MicrophoneSwitcher:
         self.current_mic_index = (self.current_mic_index + 1) % len(self.microphones)
         print(f"Switched to: {self.microphones[self.current_mic_index]}")
 
-    def listen_for_activation(self, activation_word="switch"):
+    def listen_for_activation(self, activation_word):
         print(f"Listening for activation word: '{activation_word}'")
         with sr.Microphone(device_index=self.current_mic_index) as source:
             self.recognizer.adjust_for_ambient_noise(source)
@@ -59,10 +70,22 @@ class MicrophoneSwitcher:
                 print(f"Error with speech recognition service: {e}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Microphone Switcher with Activation Word")
+    parser = argparse.ArgumentParser(
+        description="Microphone Switcher with Activation Word",
+        epilog=(
+            "Examples:\n"
+            "  python script_name.py -l\n"
+            "    List all available microphones.\n"
+            "  python script_name.py -f USB -a hello\n"
+            "    Use microphones containing 'USB' and set activation word to 'hello'.\n"
+            "  python script_name.py -f 0,2 -a switch\n"
+            "    Use microphones at indices 0 and 2 and set activation word to 'switch'.\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("-l", "--list-mics", action="store_true", help="List all available microphones.")
-    parser.add_argument("-f", "--mic-filter", type=str, help="Filter microphones by name substring.")
-    parser.add_argument("-a", "--activation-word", type=str, default="switch", help="Set the activation word to switch microphones.")
+    parser.add_argument("-f", "--mic-filter", type=str, help="Filter microphones by name substring or specify a comma-separated list of indices.")
+    parser.add_argument("-a", "--activation-word", type=str, required=True, help="Set the activation word to switch microphones.")
     args = parser.parse_args()
 
     if args.list_mics:
