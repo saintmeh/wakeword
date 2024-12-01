@@ -55,18 +55,20 @@ class MicrophoneSwitcher:
             while True:
                 try:
                     print("Waiting for activation word or sleep word...")
+                    # Listen for speech
                     audio = self.recognizer.listen(source, timeout=self.sleep_time)
                     transcript = self.recognizer.recognize_google(audio)
                     print(f"Recognized: {transcript}")
 
-                    if self.sleep_word.lower() in transcript.lower():
+                    # Check if the activation word is the first word
+                    words = transcript.strip().split()
+                    if words and words[0].lower() == activation_word.lower():
+                        self.switch_microphone()
+                        last_activity_time = time.time()
+                    elif words and words[0].lower() == self.sleep_word.lower():
                         print(f"Detected sleep word: '{self.sleep_word}'")
                         self.return_to_starting_mic()
                         break
-
-                    if activation_word.lower() in transcript.lower():
-                        self.switch_microphone()
-                        last_activity_time = time.time()
 
                 except sr.WaitTimeoutError:
                     if time.time() - last_activity_time >= self.sleep_time:
@@ -97,10 +99,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("-l", "--list-mics", action="store_true", help="List all available microphones.")
     parser.add_argument("-f", "--mic-filter", type=str, help="Filter microphones by name substring or specify a comma-separated list of indices.")
-    parser.add_argument("-a", "--activation-word", type=str, required=True, help="Set the activation word to switch microphones.")
+    parser.add_argument("-a", "--activation-word", type=str, help="Set the activation word to switch microphones.")
     parser.add_argument("-s", "--sleep-word", type=str, default="sleep", help="Set the sleep word to return to the starting microphone (default: 'sleep').")
     parser.add_argument("-t", "--sleep-time", type=int, default=30, help="Set the sleep timeout in seconds (default: 30).")
     args = parser.parse_args()
+
+    if not args.list_mics and not args.activation_word:
+        parser.error("The -a/--activation-word argument is required unless -l/--list-mics is specified.")
 
     if args.list_mics:
         MicrophoneSwitcher().list_microphones()
