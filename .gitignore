@@ -1,5 +1,6 @@
 *.pyc
 venv/
+testbed.py
 
 #env vars.. if we use them
 .env
